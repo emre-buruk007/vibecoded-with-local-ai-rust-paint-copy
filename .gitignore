@@ -1,0 +1,17 @@
+# Build artifacts
+/target
+**/*.rs.bk
+*.exe
+
+# IDE
+.idea/
+.vs/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Cargo cache
+.cargo/
