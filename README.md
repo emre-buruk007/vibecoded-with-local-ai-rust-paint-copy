@@ -4,6 +4,41 @@ A pixel-perfect drawing and painting application built in Rust with egui.
 
 ## Features
 
+### Current Status
+| Category | Status | Notes |
+|----------|--------|-------|
+| **Canvas Visibility** | Done | Canvas renders correctly using egui ColorImage texture |
+| **Canvas Resizing** | Done | Scales to fit available window space while maintaining 4:3 aspect ratio |
+| **Coordinate Mapping** | Done | Screen→canvas coordinate transformation for accurate mouse interaction |
+| **Pencil Tool** | Done | Freehand drawing with live brush preview as user drags |
+| **Eraser Tool** | Done | Erases pixels (white color) with live preview |
+| **Line Tool** | Done | Dashed preview during drag, finalized on release |
+| **Rectangle Tool** | Done | Dashed preview during drag, filled/outline on release |
+| **Ellipse Tool** | Done | Dashed preview during drag, filled/outline on release |
+| **Fill Tool** | Planned | Flood fill logic exists in shapes.rs but UI not wired up yet |
+| **Eyedropper Tool** | Planned | Color picker logic exists but canvas sampling not implemented |
+| **Save/Load** | In Progress | Save as PNG implemented; open image loading needs testing |
+| **Undo/Redo** | In Progress | Basic undo stack in place; needs verification with new drawing logic |
+| **Menu Bar** | Done | File and Edit menus with proper UI layout |
+| **Dark Theme** | Done | Custom dark-themed interface throughout |
+
+### Planned Features
+- **Fill Tool**: Complete flood fill with UI integration and tolerance slider
+- **Eyedropper Tool**: Sample colors from canvas display (requires pixel readback)
+- **Redo Support**: Extend undo stack to support redo (currently only undo)
+- **Zoom/Pan**: Add zoom controls and pan navigation for large canvases
+- **Layers**: Multi-layer support with layer panel
+- **More Tools**: Text tool, shape fill, gradient fill, selection tools
+- **Preferences**: Configurable settings (default canvas size, undo steps, etc.)
+
+### Known Limitations
+- Fill tool not yet fully integrated with UI
+- Eyedropper cannot sample from displayed canvas (texture readback limitation)
+- No redo support (only single-stack undo)
+- No zoom or pan controls (canvas scales to fit but cannot zoom in/out)
+
+## Features
+
 - **Multiple Drawing Tools**: Pencil, Line, Rectangle, Ellipse, Fill (flood fill), Eyedropper (color picker), Eraser
 - **Shape Filling**: Toggle fill mode for Rectangle and Ellipse tools
 - **Color Palette**: 12 preset colors with custom color picker (full RGBA control)
