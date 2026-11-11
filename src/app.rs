@@ -31,7 +31,6 @@ pub struct PaintApp {
     brush_size: f32,
     fill_shape: bool,
     draw_state: DrawState,
-    pre_draw_state: Option<Vec<u8>>,
     undo_stack: UndoStack,
     pointer_pos: Option<egui::Pos2>,
     primary_just_pressed: bool,
@@ -54,7 +53,6 @@ impl PaintApp {
             draw_state: DrawState::None,
             undo_stack: UndoStack::new(20),
             pointer_pos: None,
-            pre_draw_state: None,
             primary_just_pressed: false,
             primary_just_released: false,
             show_about: false,
@@ -225,13 +223,10 @@ impl App for PaintApp {
             // PRESS
             if self.primary_just_pressed {
                 if let Some(pos) = self.pointer_pos {
-                    self.save_state();
                     if let Some(pt) = self.screen_to_canvas(pos) {
-                        // Save canvas state before shape drawing
-                        if self.tool.is_shape() {
-                            self.pre_draw_state = Some(self.canvas.clone_data());
-                        }
                         if self.tool == Tool::Pencil || self.tool == Tool::Eraser {
+                            // Pencil/Eraser: draw immediately to canvas buffer
+                            self.save_state();
                             let r = (self.brush_size / 2.0) as i32;
                             for dy in -r..=r {
                                 for dx in -r..=r {
@@ -240,20 +235,24 @@ impl App for PaintApp {
                                     }
                                 }
                             }
+                            self.draw_state = DrawState::new(pt);
+                        } else if self.tool.is_shape() {
+                            // Shape tools: just record start, preview drawn via Painter overlay
+                            self.draw_state = DrawState::new(pt);
                         }
-                        self.draw_state = DrawState::new(pos);
                         ctx.request_repaint();
                     }
                 }
             }
 
-            // DRAG (pencil/eraser draw to buffer; shapes draw dashed preview to buffer)
+            // DRAG (pencil/eraser draw to buffer; shapes draw dashed preview via Painter overlay)
             if matches!(self.draw_state, DrawState::Drawing { .. }) {
                 if let Some(pos) = self.pointer_pos {
+                    let layout = self.canvas_layout;
                     let canvas_pt = self.screen_to_canvas(pos);
                     if let Some(pt) = canvas_pt {
                         let start_pt = match self.draw_state {
-                            DrawState::Drawing { start } => Point::new(start.x as i32, start.y as i32),
+                            DrawState::Drawing { start } => start,
                             _ => pt,
                         };
 
@@ -263,31 +262,52 @@ impl App for PaintApp {
                                 shapes::draw_line(&mut self.canvas, start_pt, pt, tool_color);
                                 ctx.request_repaint();
                             }
-                            // Line tool: dashed preview to buffer
+                            // Line tool: dashed preview via Painter overlay
                             Tool::Line => {
-                                shapes::draw_dashed_line(&mut self.canvas, start_pt, pt, tool_color);
+                                let start_screen = egui::pos2(
+                                    (start_pt.x as f32) * layout.scale + layout.rect.min.x,
+                                    (start_pt.y as f32) * layout.scale + layout.rect.min.y,
+                                );
+                                let end_screen = egui::pos2(
+                                    (pt.x as f32) * layout.scale + layout.rect.min.x,
+                                    (pt.y as f32) * layout.scale + layout.rect.min.y,
+                                );
+                                ui.painter().line_segment([start_screen, end_screen], (1.5, tool_color));
                                 ctx.request_repaint();
                             }
-                            // Rectangle: dashed preview to buffer
+                            // Rectangle: dashed preview via Painter overlay
                             Tool::Rectangle => {
+                                let start_screen = egui::pos2(
+                                    (start_pt.x as f32) * layout.scale + layout.rect.min.x,
+                                    (start_pt.y as f32) * layout.scale + layout.rect.min.y,
+                                );
+                                let end_screen = egui::pos2(
+                                    (pt.x as f32) * layout.scale + layout.rect.min.x,
+                                    (pt.y as f32) * layout.scale + layout.rect.min.y,
+                                );
+                                let rect = egui::Rect::from_two_pos(start_screen, end_screen);
                                 if self.fill_shape {
-                                    shapes::fill_rect(&mut self.canvas, start_pt, pt, tool_color);
+                                    ui.painter().rect_filled(rect, 0.0, tool_color);
                                 } else {
-                                    shapes::draw_dashed_rect(&mut self.canvas, start_pt, pt, tool_color);
+                                    ui.painter().rect_stroke(rect, 0.0, (1.5, tool_color));
                                 }
                                 ctx.request_repaint();
                             }
-                            // Ellipse: dashed preview to buffer
+                            // Ellipse: preview via Painter overlay (bounding box rect)
                             Tool::Ellipse => {
                                 let cx = (start_pt.x + pt.x) / 2;
                                 let cy = (start_pt.y + pt.y) / 2;
-                                let rx = (pt.x - start_pt.x).unsigned_abs() as i32 / 2;
-                                let ry = (pt.y - start_pt.y).unsigned_abs() as i32 / 2;
-                                let center = Point::new(cx, cy);
+                                let rx = (pt.x - start_pt.x).abs() / 2;
+                                let ry = (pt.y - start_pt.y).abs() / 2;
+                                let center_screen = egui::pos2(
+                                    (cx as f32) * layout.scale + layout.rect.min.x,
+                                    (cy as f32) * layout.scale + layout.rect.min.y,
+                                );
+                                let radii = egui::vec2(rx as f32, ry as f32);
                                 if self.fill_shape {
-                                    shapes::fill_ellipse(&mut self.canvas, center, rx, ry, tool_color);
+                                    ui.painter().circle(center_screen, radii.x, tool_color, egui::Stroke::NONE);
                                 } else {
-                                    shapes::draw_dashed_ellipse(&mut self.canvas, center, rx, ry, tool_color);
+                                    ui.painter().circle(center_screen, radii.x, egui::Color32::TRANSPARENT, egui::Stroke::new(1.5_f32, tool_color));
                                 }
                                 ctx.request_repaint();
                             }
@@ -298,26 +318,22 @@ impl App for PaintApp {
                 }
             }
 
-            // RELEASE (finalize shape)
+            // RELEASE (finalize shape to canvas buffer)
             if self.primary_just_released && matches!(self.draw_state, DrawState::Drawing { .. }) {
                 if let DrawState::Drawing { start } = self.draw_state {
-                    let start_pt = Point::new(start.x as i32, start.y as i32);
+                    let start_pt = start;
                     if let Some(end_pt) = self.pointer_pos.and_then(|p| self.screen_to_canvas(p)) {
-                        // Restore canvas to pre-draw state for shape tools
-                        if self.tool.is_shape() {
-                            if let Some(pre_data) = &self.pre_draw_state {
-                                self.canvas.load_from_pixels(pre_data);
-                            }
-                            self.pre_draw_state = None;
-                        }
+                        let dx = (start_pt.x as f32 - end_pt.x as f32).abs();
+                        let dy = (start_pt.y as f32 - end_pt.y as f32).abs();
+                        let dist = dx.hypot(dy);
                         match self.tool {
                             Tool::Line => {
-                                if start.distance(egui::Pos2::new(end_pt.x as f32, end_pt.y as f32)) > 1.0 {
+                                if dist > 1.0 {
                                     shapes::draw_line(&mut self.canvas, start_pt, end_pt, tool_color);
                                 }
                             }
                             Tool::Rectangle => {
-                                if start.distance(egui::Pos2::new(end_pt.x as f32, end_pt.y as f32)) > 1.0 {
+                                if dist > 1.0 {
                                     if self.fill_shape {
                                         shapes::fill_rect(&mut self.canvas, start_pt, end_pt, tool_color);
                                     } else {
@@ -326,11 +342,11 @@ impl App for PaintApp {
                                 }
                             }
                             Tool::Ellipse => {
-                                if start.distance(egui::Pos2::new(end_pt.x as f32, end_pt.y as f32)) > 1.0 {
+                                if dist > 1.0 {
                                     let cx = (start_pt.x + end_pt.x) / 2;
                                     let cy = (start_pt.y + end_pt.y) / 2;
-                                    let rx = (end_pt.x - start_pt.x).unsigned_abs() as i32 / 2;
-                                    let ry = (end_pt.y - start_pt.y).unsigned_abs() as i32 / 2;
+                                    let rx = (end_pt.x - start_pt.x).abs() / 2;
+                                    let ry = (end_pt.y - start_pt.y).abs() / 2;
                                     let center = Point::new(cx, cy);
                                     if self.fill_shape {
                                         shapes::fill_ellipse(&mut self.canvas, center, rx, ry, tool_color);
