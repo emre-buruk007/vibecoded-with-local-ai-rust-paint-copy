@@ -30,6 +30,82 @@ pub fn draw_line(canvas: &mut Canvas, p0: Point, p1: Point, color: crate::egui::
     }
 }
 
+/// Draw a dashed (dotted) line for preview rendering.
+/// Every other pixel is drawn, creating a dotted preview effect.
+pub fn draw_dashed_line(canvas: &mut Canvas, p0: Point, p1: Point, color: crate::egui::Color32) {
+    let (mut x0, mut y0) = (p0.x, p0.y);
+    let (x1, y1) = (p1.x, p1.y);
+    let dx = (x1 - x0).unsigned_abs() as i32;
+    let dy = (y1 - y0).unsigned_abs() as i32;
+    let sx = if x0 < x1 { 1 } else { -1 };
+    let sy = if y0 < y1 { 1 } else { -1 };
+    let mut err = dx + dy;
+    let mut step = 0i32;
+    loop {
+        // Draw every other pixel for dashed effect
+        if step % 2 == 0 {
+            canvas.set_pixel_unchecked(x0 as u32, y0 as u32, color);
+        }
+        if x0 == x1 && y0 == y1 { break; }
+        let e2 = 2 * err;
+        if e2 >= dy { err += dy; x0 += sx; }
+        if e2 <= dx { err += dx; y0 += sy; }
+        step += 1;
+    }
+}
+
+/// Draw a dashed rectangle outline for preview rendering.
+pub fn draw_dashed_rect(canvas: &mut Canvas, p0: Point, p1: Point, color: crate::egui::Color32) {
+    let x0 = p0.x.min(p1.x); let x1 = p0.x.max(p1.x);
+    let y0 = p0.y.min(p1.y); let y1 = p0.y.max(p1.y);
+    draw_dashed_line(canvas, Point::new(x0, y0), Point::new(x1, y0), color);
+    draw_dashed_line(canvas, Point::new(x0, y1), Point::new(x1, y1), color);
+    draw_dashed_line(canvas, Point::new(x0, y0), Point::new(x0, y1), color);
+    draw_dashed_line(canvas, Point::new(x1, y0), Point::new(x1, y1), color);
+}
+
+/// Draw a dashed ellipse outline for preview rendering.
+pub fn draw_dashed_ellipse(canvas: &mut Canvas, center: Point, rx: i32, ry: i32, color: crate::egui::Color32) {
+    // Use the same ellipse algorithm but draw only every other pixel
+    let _x = 0_i64;
+    let mut y = -(ry as i64);
+    let mut px = 0_i64;
+    let mut py = (ry * ry) as i64;
+    let mut px2 = 2 * rx as i64 * rx as i64;
+    let mut py2 = 2 * ry as i64 * ry as i64;
+    let mut p = (ry as i64 * ry as i64) - (rx as i64 * rx as i64 * ry as i64) + (rx as i64 * rx as i64 / 4);
+    let mut step = 0i64;
+    while px < px2 {
+        if step % 2 == 0 {
+            let cx = center.x + px as i32;
+            let cy = center.y - py as i32;
+            canvas.set_pixel_unchecked(cx.max(0) as u32, cy.max(0) as u32, color);
+            canvas.set_pixel_unchecked(cx.max(0) as u32, (-cy).max(0) as u32, color);
+            canvas.set_pixel_unchecked((-cx).max(0) as u32, cy.max(0) as u32, color);
+            canvas.set_pixel_unchecked((-cx).max(0) as u32, (-cy).max(0) as u32, color);
+        }
+        if p < 0 { px += py2; px2 += py2; p += py2; }
+        else { px += py2; px2 += py2; py -= px2; py2 -= px2; p += py2 - px2; }
+        step += 1;
+    }
+    p = (ry as i64 * ry as i64) + (rx as i64 * rx as i64 / 4);
+    step = 0;
+    while y < 0 {
+        if step % 2 == 0 {
+            let cx = center.x + px as i32;
+            let cy = center.y - py as i32;
+            canvas.set_pixel_unchecked(cx.max(0) as u32, cy.max(0) as u32, color);
+            canvas.set_pixel_unchecked(cx.max(0) as u32, (-cy).max(0) as u32, color);
+            canvas.set_pixel_unchecked((-cx).max(0) as u32, cy.max(0) as u32, color);
+            canvas.set_pixel_unchecked((-cx).max(0) as u32, (-cy).max(0) as u32, color);
+        }
+        if p > 0 { py -= px2; py2 -= px2; p -= px2; }
+        else { px += py2; px2 += py2; py -= px2; py2 -= px2; p += py2 - px2; }
+        y += 1;
+        step += 1;
+    }
+}
+
 pub fn draw_rect(canvas: &mut Canvas, p0: Point, p1: Point, color: crate::egui::Color32) {
     let x0 = p0.x.min(p1.x); let x1 = p0.x.max(p1.x);
     let y0 = p0.y.min(p1.y); let y1 = p0.y.max(p1.y);

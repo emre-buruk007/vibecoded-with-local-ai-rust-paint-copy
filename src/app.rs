@@ -9,6 +9,21 @@ use crate::draw::DrawState;
 use crate::shapes;
 use crate::shapes::Point;
 
+#[derive(Clone, Copy, Debug)]
+struct CanvasLayout {
+    rect: egui::Rect,
+    scale: f32,
+}
+
+impl Default for CanvasLayout {
+    fn default() -> Self {
+        Self {
+            rect: egui::Rect::NOTHING,
+            scale: 1.0,
+        }
+    }
+}
+
 pub struct PaintApp {
     canvas: Canvas,
     tool: Tool,
@@ -17,8 +32,11 @@ pub struct PaintApp {
     fill_shape: bool,
     draw_state: DrawState,
     undo_stack: UndoStack,
-    /// Tracked pointer position for drawing when interact_pos() is unreliable.
     pointer_pos: Option<egui::Pos2>,
+    primary_just_pressed: bool,
+    primary_just_released: bool,
+    show_about: bool,
+    canvas_layout: CanvasLayout,
 }
 
 impl PaintApp {
@@ -32,6 +50,10 @@ impl PaintApp {
             draw_state: DrawState::None,
             undo_stack: UndoStack::new(20),
             pointer_pos: None,
+            primary_just_pressed: false,
+            primary_just_released: false,
+            show_about: false,
+            canvas_layout: CanvasLayout::default(),
         }
     }
 
@@ -40,341 +62,273 @@ impl PaintApp {
     }
 
     fn undo(&mut self) {
-        if let Some(data) = self.undo_stack.pop() {
+        let current = self.canvas.clone_data();
+        if let Some(data) = self.undo_stack.pop(&current) {
             self.canvas.load_from_pixels(&data);
         }
     }
-    fn apply_tool(canvas: &mut Canvas, tool: Tool, color: egui::Color32, brush_size: f32, fill_shape: bool, draw_state: &DrawState, screen_pos: egui::Pos2) {
-        let tool_color = if tool == Tool::Eraser { egui::Color32::WHITE } else { color };
-        let size = brush_size as i32;
-        match (tool, draw_state) {
-            (Tool::Pencil | Tool::Eraser, DrawState::Drawing { .. }) => {
-                let end = Point::new(screen_pos.x as i32, screen_pos.y as i32);
-                let start_pos = draw_state.start_pos();
-                let start = Point::new(start_pos.x as i32, start_pos.y as i32);
-                shapes::draw_line(canvas, start, end, tool_color);
-                for dy in -size..=size {
-                    for dx in -size..=size {
-                        if dx*dx + dy*dy <= size*size {
-                            let px = (end.x + dx).max(0) as u32;
-                            let py = (end.y + dy).max(0) as u32;
-                            if px < Canvas::CW && py < Canvas::CH {
-                                canvas.set_pixel_unchecked(px, py, tool_color);
-                            }
-                        }
-                    }
-                }
-            }
-            (Tool::Line, DrawState::Drawing { .. }) => {
-                let end = Point::new(screen_pos.x as i32, screen_pos.y as i32);
-                let start_pos = draw_state.start_pos();
-                let start = Point::new(start_pos.x as i32, start_pos.y as i32);
-                shapes::draw_line(canvas, start, end, tool_color);
-            }
-            (Tool::Rectangle, DrawState::Drawing { .. }) => {
-                let end = Point::new(screen_pos.x as i32, screen_pos.y as i32);
-                let start_pos = draw_state.start_pos();
-                let start = Point::new(start_pos.x as i32, start_pos.y as i32);
-                if fill_shape { shapes::fill_rect(canvas, start, end, tool_color); }
-                else { shapes::draw_rect(canvas, start, end, tool_color); }
-            }
-            (Tool::Ellipse, DrawState::Drawing { .. }) => {
-                let end = Point::new(screen_pos.x as i32, screen_pos.y as i32);
-                let start_pos = draw_state.start_pos();
-                let start = Point::new(start_pos.x as i32, start_pos.y as i32);
-                let center = Point::new((start.x + end.x) / 2, (start.y + end.y) / 2);
-                let rx = (end.x - start.x).abs() / 2;
-                let ry = (end.y - start.y).abs() / 2;
-                if fill_shape { shapes::fill_ellipse(canvas, center, rx, ry, tool_color); }
-                else { shapes::draw_ellipse(canvas, center, rx, ry, tool_color); }
-            }
-            _ => {}
+
+    fn redo(&mut self) {
+        let current = self.canvas.clone_data();
+        if let Some(data) = self.undo_stack.redo_pop(&current) {
+            self.canvas.load_from_pixels(&data);
         }
     }
 
-    fn canvas_to_image(&self) -> egui::ColorImage {
-        let mut img = egui::ColorImage::new([Canvas::CW as usize, Canvas::CH as usize], egui::Color32::TRANSPARENT);
-        for y in 0..Canvas::CH {
-            for x in 0..Canvas::CW {
-                if let Some(c) = self.canvas.get_pixel(x, y) {
-                    let idx = (y * Canvas::CW + x) as usize;
-                    if idx < img.pixels.len() {
-                        img.pixels[idx] = c;
-                    }
+    fn clear_canvas(&mut self) {
+        self.save_state();
+        self.canvas.fill(egui::Color32::WHITE);
+    }
+
+    fn canvas_to_color_image(&self) -> egui::ColorImage {
+        let cw = self.canvas.width() as usize;
+        let ch = self.canvas.height() as usize;
+        let mut image = egui::ColorImage::new([cw, ch], egui::Color32::TRANSPARENT);
+        for y in 0..ch {
+            for x in 0..cw {
+                if let Some(pixel) = self.canvas.get_pixel(x as u32, y as u32) {
+                    let idx = y * cw + x;
+                    image.pixels[idx] = egui::Color32::from_rgba_unmultiplied(pixel[0], pixel[1], pixel[2], pixel[3]);
                 }
             }
         }
-        img
+        image
     }
 
-    /// Convert egui ColorImage to a vector of RGBA bytes for saving.
-    fn image_to_bytes(img: &egui::ColorImage) -> Vec<u8> {
-        let mut bytes = Vec::with_capacity(img.width() * img.height() * 4);
-        for pixel in &img.pixels {
-            bytes.push(pixel[0]);
-            bytes.push(pixel[1]);
-            bytes.push(pixel[2]);
-            bytes.push(pixel[3]);
+    fn screen_to_canvas(&self, screen_pos: egui::Pos2) -> Option<Point> {
+        let layout = self.canvas_layout;
+        let local = screen_pos - layout.rect.min;
+        let canvas_x = (local.x / layout.scale) as i32;
+        let canvas_y = (local.y / layout.scale) as i32;
+        let cw = self.canvas.width() as i32;
+        let ch = self.canvas.height() as i32;
+        if canvas_x < 0 || canvas_x >= cw || canvas_y < 0 || canvas_y >= ch {
+            None
+        } else {
+            Some(Point::new(canvas_x, canvas_y))
         }
-        bytes
     }
 }
 
 impl App for PaintApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Apply dark theme
-        ctx.style_mut(|style| {
-            style.visuals.extreme_bg_color = egui::Color32::from_rgb(20, 20, 30);
-            style.visuals.window_fill = egui::Color32::from_rgb(30, 30, 45);
-            style.visuals.window_stroke = egui::Stroke::new(1.0_f32, egui::Color32::from_rgb(50, 50, 70));
-            style.visuals.panel_fill = egui::Color32::from_rgb(25, 25, 40);
-            style.visuals.selection.bg_fill = egui::Color32::from_rgb(59, 130, 246);
-            style.visuals.widgets.noninteractive.bg_fill = egui::Color32::from_rgb(35, 35, 55);
-            style.visuals.widgets.inactive.bg_fill = egui::Color32::from_rgb(35, 35, 55);
-            style.visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(45, 45, 70);
-            style.visuals.widgets.active.bg_fill = egui::Color32::from_rgb(59, 130, 246);
-            style.visuals.widgets.noninteractive.rounding = egui::Rounding::same(4.0);
-            style.visuals.widgets.active.rounding = egui::Rounding::same(4.0);
-            style.visuals.widgets.hovered.rounding = egui::Rounding::same(4.0);
-            style.visuals.menu_rounding = egui::Rounding::same(6.0);
-            style.visuals.override_text_color = Some(egui::Color32::from_rgb(220, 220, 240));
-            style.spacing.button_padding = egui::vec2(8.0, 4.0);
-            style.spacing.item_spacing = egui::vec2(4.0, 4.0);
-        });
+        self.pointer_pos = ctx.pointer_hover_pos();
 
-        // Menu bar
-        egui::TopBottomPanel::top("menu_bar").resizable(false).show(ctx, |ui| {
+        // MENU BAR
+        egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                ui.menu_button("File", |ui| {
-                    if ui.button("New Canvas").clicked() {
-                        self.canvas = Canvas::new();
-                        self.undo_stack = UndoStack::new(20);
-                    }
-                    if ui.button("Clear Canvas").clicked() {
-                        self.save_state();
-                        self.canvas = Canvas::new();
-                    }
-                    ui.separator();
-                    if ui.button("Save as PNG").clicked() {
-                        let img = self.canvas_to_image();
-                        let bytes = Self::image_to_bytes(&img);
-                        let image = image::DynamicImage::ImageRgba8(image::RgbaImage::from_vec(Canvas::CW, Canvas::CH, bytes).expect("Invalid image buffer"));
-                        if let Some(path) = rfd::FileDialog::new()
-                            .add_filter("PNG", &["png"])
-                            .set_file_name("painting.png")
-                            .save_file()
-                        {
-                            if let Err(e) = image.save(&path) {
-                                eprintln!("Failed to save image: {}", e);
-                            }
-                        }
-                    }
-                    if ui.button("Open").clicked() {
-                        if let Some(path) = rfd::FileDialog::new()
-                            .add_filter("Image", &["png", "jpg", "jpeg"])
-                            .set_file_name("image.png")
-                            .pick_file()
-                        {
-                            if let Ok(img) = image::open(&path) {
-                                let bgr = img.to_rgba8();
-                                self.save_state();
-                                self.canvas.load_from_pixels(&bgr);
-                            }
-                        }
-                    }
-                });
-                ui.menu_button("Edit", |ui| {
-                    if ui.button("Undo").clicked() {
-                        self.undo();
-                    }
-                });
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.label(format!("v{}", env!("CARGO_PKG_VERSION")));
-                });
-            });
-        });
-        // Left toolbar
-        egui::SidePanel::left("toolbar").resizable(false).show(ctx, |ui| {
-            let mut current_tool = self.tool;
-            let mut current_fill = self.fill_shape;
-            let mut current_color = self.color;
-            let current_brush = self.brush_size;
-
-            ui.style_mut().visuals.override_text_color = Some(egui::Color32::from_rgb(220, 220, 240));
-            ui.style_mut().visuals.widgets.active.bg_fill = egui::Color32::from_rgb(59, 130, 246);
-            ui.style_mut().visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(45, 45, 70);
-            ui.style_mut().visuals.widgets.inactive.bg_fill = egui::Color32::from_rgb(35, 35, 55);
-
-            ui.heading("Paint");
-            ui.add_space(4.0);
-            ui.separator();
-            ui.add_space(4.0);
-
-            for t in Tool::all() {
-                let is_shape = t.is_shape();
-                let selected = current_tool == t;
-                if ui.selectable_label(selected, format!("{} {}", t.icon(), t.name())).clicked() {
-                    self.tool = t;
-                    current_tool = t;
-                }
-                ui.add_space(2.0);
-                if is_shape {
-                    ui.add_space(2.0);
-                    ui.horizontal(|ui| {
-                        ui.add_space(16.0);
-                        let mut fill_clone = current_fill;
-                        if ui.checkbox(&mut fill_clone, "Fill").clicked() {
-                            self.fill_shape = fill_clone;
-                            current_fill = fill_clone;
+                if ui.button("File").clicked() {
+                    ui.menu_button("File", |ui| {
+                        if ui.button("Open...").clicked() {}
+                        if ui.button("Save...").clicked() {}
+                        ui.separator();
+                        if ui.button("About").clicked() {
+                            self.show_about = true;
                         }
                     });
                 }
-                ui.add_space(6.0);
-            }
-
-            ui.separator();
-            ui.add_space(4.0);
-            ui.label("Brush Size");
-            let mut slider_val = current_brush;
-            if ui.add(egui::Slider::new(&mut slider_val, 1.0..=50.0).text("Size")).changed() {
-                self.brush_size = slider_val;
-                
-            }
-            ui.add_space(6.0);
-
-            ui.separator();
-            ui.add_space(4.0);
-            ui.label("Color");
-            for c in &crate::ui::toolbar::PALETTE {
-                let mut clone = *c;
-                if ui.color_edit_button_srgba(&mut clone).changed() {
-                    self.color = clone;
-                    current_color = clone;
+                if ui.button("Edit").clicked() {
+                    ui.menu_button("Edit", |ui| {
+                        if ui.button("Undo  (Ctrl+Z)").clicked() {
+                            self.undo();
+                        }
+                        if ui.button("Redo  (Ctrl+Y)").clicked() {
+                            self.redo();
+                        }
+                        if ui.button("Clear Canvas").clicked() {
+                            self.clear_canvas();
+                        }
+                    });
                 }
-            }
-            ui.add_space(2.0);
-            if ui.color_edit_button_srgba(&mut current_color).changed() {
-                self.color = current_color;
-            }
-
-            ui.add_space(12.0);
-        });
-        // Bottom info bar
-        egui::TopBottomPanel::bottom("info_bar").resizable(false).show(ctx, |ui| {
-            ui.style_mut().visuals.override_text_color = Some(egui::Color32::from_rgb(160, 160, 190));
-            ui.horizontal(|ui| {
-                ui.label(format!("Tool: {} ({}) - {}x{}px", self.tool.name(), self.tool.icon(), Canvas::CW, Canvas::CH));
-                ui.separator();
-                ui.label(format!("Brush: {:.0}px", self.brush_size));
-                ui.separator();
-                ui.label(format!("Color: #{:02X}{:02X}{:02X}", self.color[0], self.color[1], self.color[2]));
-                ui.separator();
-                if let Some(p) = self.pointer_pos {
-                    ui.label(format!("Cursor: ({:.0}, {:.0})", p.x, p.y));
-                }
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.label(format!("{} x {}", Canvas::CW, Canvas::CH));
+                });
             });
         });
 
-        // Central canvas area
+        // LEFT TOOLBAR
+        let toolbar_actions = egui::SidePanel::left("toolbar")
+            .default_width(180.0)
+            .show(ctx, |ui| {
+                crate::ui::toolbar::toolbar_ui(
+                    ui, &mut self.tool, &mut self.color,
+                    &mut self.brush_size, &mut self.fill_shape,
+                    self.undo_stack.undo_len() > 0,
+                    self.undo_stack.redo_len() > 0,
+                )
+            });
+        let actions = toolbar_actions.inner;
+        if actions.undo { self.undo(); }
+        if actions.redo { self.redo(); }
+        if actions.clear { self.clear_canvas(); }
+        if actions.about { self.show_about = true; }
+
+        // RIGHT PANEL
+        egui::SidePanel::right("right_panel")
+            .resizable(false)
+            .show(ctx, |ui| {
+                ui.heading("Layers");
+                ui.separator();
+                ui.label("1 layer");
+            });
+
+        // CENTRAL CANVAS
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.style_mut().visuals.widgets.noninteractive.bg_fill = egui::Color32::from_rgb(40, 40, 55);
+            self.primary_just_pressed = ui.input(|i| i.pointer.primary_pressed());
+            self.primary_just_released = ui.input(|i| i.pointer.primary_released());
+            let pointer = ui.input(|i| i.pointer.interact_pos().or(i.pointer.hover_pos()));
 
-            let canvas_rect = ui.available_rect_before_wrap();
-            let aspect = Canvas::CW as f32 / Canvas::CH as f32;
-            let (tex_w, tex_h) = if canvas_rect.width() / canvas_rect.height() > aspect {
-                (canvas_rect.height() * aspect, canvas_rect.height())
+            let available = ui.available_size();
+            let cw_f = Canvas::CW as f32;
+            let ch_f = Canvas::CH as f32;
+            let aspect = cw_f / ch_f;
+            let (canvas_w, canvas_h) = if available.x / available.y > aspect {
+                let h = available.y;
+                (h * aspect, h)
             } else {
-                (canvas_rect.width(), canvas_rect.width() / aspect)
+                (available.x, available.x / aspect)
             };
-            let texture_rect = egui::Rect::from_min_size(
-                egui::Pos2::new(canvas_rect.min.x, canvas_rect.min.y),
-                egui::Vec2::new(tex_w, tex_h),
-            );
-            // Draw canvas background with border
-            ui.painter().rect_filled(
-                texture_rect,
-                4.0,
-                egui::Color32::from_rgb(255, 255, 255),
-            );
-            ui.painter().rect_stroke(
-                texture_rect,
-                4.0,
-                egui::Stroke::new(2.0_f32, egui::Color32::from_rgb(100, 100, 130)),
-            );
+            let canvas_w = canvas_w.floor().max(100.0);
+            let canvas_h = canvas_h.floor().max(100.0);
+            let size = egui::Vec2::new(canvas_w, canvas_h);
+            let scale = canvas_w / cw_f;
 
-            let img = self.canvas_to_image();
-            let handle = ctx.load_texture("canvas", img, egui::TextureOptions::default());
-            ui.painter().image(
-                handle.id(),
-                texture_rect,
-                egui::Rect::from_min_size(egui::Pos2::ZERO, egui::Vec2::new(Canvas::CW as f32, Canvas::CH as f32)),
-                egui::Color32::WHITE,
-            );
-            // === POINTER POSITION TRACKING ===
-            // Track pointer position manually because egui 0.29 PointerState
-            // does not expose a direct `pos()` field. We detect the start of
-            // interaction via `is_using()` transitions.
-            let was_using = self.pointer_pos.is_some();
-            let primary_pressed = ui.input(|i| i.pointer.primary_pressed());
-            if primary_pressed {
-                if let Some(pos) = ui.input(|i| i.pointer.interact_pos()) {
-                    self.pointer_pos = Some(pos);
+            let (alloc_rect, resp) = ui.allocate_exact_size(size, egui::Sense::click_and_drag());
+            self.canvas_layout = CanvasLayout { rect: alloc_rect, scale };
+
+            let tile_size = 16.0;
+            for x in 0..(canvas_w / tile_size + 1.0) as i32 {
+                for y in 0..(canvas_h / tile_size + 1.0) as i32 {
+                    let is_white = (x + y) % 2 == 0;
+                    let tc = if is_white { egui::Color32::GRAY } else { egui::Color32::DARK_GRAY };
+                    let tr = egui::Rect::from_min_size(
+                        alloc_rect.left_top() + egui::vec2(x as f32 * tile_size, y as f32 * tile_size),
+                        egui::Vec2::splat(tile_size),
+                    );
+                    ui.painter().rect_filled(tr, 0.0, tc);
                 }
-            } else if !was_using && self.pointer_pos.is_none() {
-                // Reset on pointer release
-                self.pointer_pos = None;
             }
 
-            // === DRAWING LOGIC ===
-            if ui.input(|i| i.pointer.primary_down()) {
-                if let Some(pos) = self.pointer_pos {
-                    match self.draw_state {
-                        DrawState::None => {
-                            // --- Initial click: start a new drawing operation ---
-                            self.save_state();
+            let color_image = self.canvas_to_color_image();
+            let texture_id = ui.ctx().load_texture("canvas", color_image, egui::TextureOptions::default()).id();
+            ui.painter().image(texture_id, alloc_rect, egui::Rect::EVERYTHING, egui::Color32::WHITE);
 
-                            // Fill tool: flood fill immediately on single click
-                            if self.tool == Tool::Fill {
-                                let pt = Point::new(pos.x as i32, pos.y as i32);
-                                shapes::flood_fill(&mut self.canvas, pt, self.color, 32);
-                            }
-                            // Eyedropper tool: pick color on single click
-                            else if self.tool == Tool::Eyedropper {
-                                let pt = Point::new(pos.x as i32, pos.y as i32);
-                                if let Some(c) = self.canvas.get_pixel(pt.x as u32, pt.y as u32) {
-                                    self.color = c;
+            let tool_color = if self.tool == Tool::Eraser { egui::Color32::WHITE } else { self.color };
+
+            // PRESS
+            if self.primary_just_pressed && resp.drag_started() {
+                if let Some(pos) = resp.interact_pointer_pos() {
+                    self.save_state();
+                    if let Some(pt) = self.screen_to_canvas(pos) {
+                        if self.tool == Tool::Pencil || self.tool == Tool::Eraser {
+                            let r = (self.brush_size / 2.0) as i32;
+                            for dy in -r..=r {
+                                for dx in -r..=r {
+                                    if dx * dx + dy * dy <= r * r {
+                                        self.canvas.set_pixel_unchecked((pt.x + dx) as u32, (pt.y + dy) as u32, tool_color);
+                                    }
                                 }
                             }
-                            // All other tools: start tracking for drag drawing
-                            else {
-                                self.draw_state = DrawState::new(pos);
-                            }
                         }
-                        DrawState::Drawing { .. } => {
-                            // --- Pointer is dragging: continue drawing ---
-                            Self::apply_tool(
-                                &mut self.canvas,
-                                self.tool,
-                                self.color,
-                                self.brush_size,
-                                self.fill_shape,
-                                &self.draw_state,
-                                pos,
-                            );
-                        }
+                        self.draw_state = DrawState::new(pos);
+                        ctx.request_repaint();
                     }
                 }
-            } else if matches!(self.draw_state, DrawState::Drawing { .. }) {
-                // Pointer released: clear the drawing state
-                self.draw_state = DrawState::None;
             }
 
-            ui.expand_to_include_rect(texture_rect);
-            ui.allocate_rect(texture_rect, egui::Sense::click_and_drag());
+            // DRAG
+            if matches!(self.draw_state, DrawState::Drawing { .. }) {
+                if let Some(pt) = self.screen_to_canvas(pointer.unwrap_or_else(|| resp.rect.center())) {
+                    let start_pt = match self.draw_state {
+                        DrawState::Drawing { start } => Point::new(start.x as i32, start.y as i32),
+                        _ => pt,
+                    };
+                    match self.tool {
+                        Tool::Pencil | Tool::Eraser => {
+                            shapes::draw_line(&mut self.canvas, start_pt, pt, tool_color);
+                        }
+                        Tool::Line => {
+                            shapes::draw_dashed_line(&mut self.canvas, start_pt, pt, tool_color);
+                        }
+                        Tool::Rectangle => {
+                            if self.fill_shape {
+                                shapes::fill_rect(&mut self.canvas, start_pt, pt, tool_color);
+                            } else {
+                                shapes::draw_dashed_rect(&mut self.canvas, start_pt, pt, tool_color);
+                            }
+                        }
+                        Tool::Ellipse => {
+                            let cx = (start_pt.x + pt.x) / 2;
+                            let cy = (start_pt.y + pt.y) / 2;
+                            let rx = (pt.x - start_pt.x).unsigned_abs() as i32 / 2;
+                            let ry = (pt.y - start_pt.y).unsigned_abs() as i32 / 2;
+                            let center = Point::new(cx, cy);
+                            if self.fill_shape {
+                                shapes::fill_ellipse(&mut self.canvas, center, rx, ry, tool_color);
+                            } else {
+                                shapes::draw_dashed_ellipse(&mut self.canvas, center, rx, ry, tool_color);
+                            }
+                        }
+                        _ => {}
+                    }
+                    ctx.request_repaint();
+                }
+            }
+
+            // RELEASE (finalize shape)
+            if self.primary_just_released && matches!(self.draw_state, DrawState::Drawing { .. }) {
+                if let DrawState::Drawing { start } = self.draw_state {
+                    let start_pt = Point::new(start.x as i32, start.y as i32);
+                    if let Some(end_pt) = self.pointer_pos.and_then(|p| self.screen_to_canvas(p)) {
+                        match self.tool {
+                            Tool::Line => {
+                                if start.distance(egui::Pos2::new(end_pt.x as f32, end_pt.y as f32)) > 1.0 {
+                                    shapes::draw_line(&mut self.canvas, start_pt, end_pt, tool_color);
+                                }
+                            }
+                            Tool::Rectangle => {
+                                if start.distance(egui::Pos2::new(end_pt.x as f32, end_pt.y as f32)) > 1.0 {
+                                    if self.fill_shape {
+                                        shapes::fill_rect(&mut self.canvas, start_pt, end_pt, tool_color);
+                                    } else {
+                                        shapes::draw_rect(&mut self.canvas, start_pt, end_pt, tool_color);
+                                    }
+                                }
+                            }
+                            Tool::Ellipse => {
+                                if start.distance(egui::Pos2::new(end_pt.x as f32, end_pt.y as f32)) > 1.0 {
+                                    let cx = (start_pt.x + end_pt.x) / 2;
+                                    let cy = (start_pt.y + end_pt.y) / 2;
+                                    let rx = (end_pt.x - start_pt.x).unsigned_abs() as i32 / 2;
+                                    let ry = (end_pt.y - start_pt.y).unsigned_abs() as i32 / 2;
+                                    let center = Point::new(cx, cy);
+                                    if self.fill_shape {
+                                        shapes::fill_ellipse(&mut self.canvas, center, rx, ry, tool_color);
+                                    } else {
+                                        shapes::draw_ellipse(&mut self.canvas, center, rx, ry, tool_color);
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    self.draw_state = DrawState::None;
+                    ctx.request_repaint();
+                }
+            }
         });
 
-        ctx.request_repaint();
+        if self.show_about {
+            egui::Window::new("About Paint")
+                .collapsible(false).resizable(false)
+                .show(ctx, |ui| {
+                    ui.heading("Rust Paint v1.0");
+                    ui.label("A simple painting app built with egui and eframe.");
+                    ui.separator();
+                    if ui.button("Close").clicked() {
+                        self.show_about = false;
+                    }
+                });
+        }
     }
 }
-
-

@@ -65,6 +65,17 @@ impl Canvas {
             self.data[..needed].copy_from_slice(&pixels[..needed]);
         }
     }
+
+    /// Fill the canvas with a given color.
+    pub fn fill(&mut self, c: egui::Color32) {
+        let rgba = c.to_srgba_unmultiplied();
+        for chunk in self.data.chunks_exact_mut(4) {
+            chunk[0] = rgba[0];
+            chunk[1] = rgba[1];
+            chunk[2] = rgba[2];
+            chunk[3] = rgba[3];
+        }
+    }
 }
 
 impl Default for Canvas {

@@ -9,19 +9,19 @@ pub enum DrawState {
     None,
     /// Currently drawing. Stores the starting screen position.
     Drawing {
-        start_pos: egui::Pos2,
+        start: egui::Pos2,
     },
 }
 
 impl DrawState {
-    pub fn new(start_pos: egui::Pos2) -> Self {
-        DrawState::Drawing { start_pos }
+    pub fn new(start: egui::Pos2) -> Self {
+        DrawState::Drawing { start }
     }
 
-    pub fn start_pos(&self) -> egui::Pos2 {
+    pub fn start(&self) -> egui::Pos2 {
         match self {
-            DrawState::None => panic!("DrawState::None has no start_pos"),
-            DrawState::Drawing { start_pos } => *start_pos,
+            DrawState::None => panic!("DrawState::None has no start"),
+            DrawState::Drawing { start } => *start,
         }
     }
 
