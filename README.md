@@ -37,6 +37,15 @@ A pixel-perfect drawing and painting application built in Rust with egui.
 - No redo support (only single-stack undo)
 - No zoom or pan controls (canvas scales to fit but cannot zoom in/out)
 
+## Bugs Fixed (v1.0.1)
+
+| Bug | Root Cause | Fix |
+|-----|-----------|-----|
+| **Menu buttons flashing** | `ui.button("File").clicked()` logic was flawed; `ui.menu_button` requires a different pattern | Replaced `if ui.button(...).clicked() { ui.menu_button(...) }` with standard `ui.menu_button(...)` calls |
+| **No drawing with shape tools** | Usage of deprecated `hover_pos()` for pointer coordinates | Use `self.pointer_pos` (set in `update()`) as the single source of truth for pointer position |
+| **Fill toggle created multiple checkboxes** | Checkbox was inside the `Tool::all()` loop, creating one checkbox per tool type | Moved "Fill" checkbox outside the tool loop; shown once when a shape tool is selected |
+| **Shape preview + final shape rendered together** | Dashed preview drawn to canvas buffer during drag, then final shape drawn on top on release | Save canvas state on drag start; restore it on release before drawing the final shape |
+
 ## Features
 
 - **Multiple Drawing Tools**: Pencil, Line, Rectangle, Ellipse, Fill (flood fill), Eyedropper (color picker), Eraser

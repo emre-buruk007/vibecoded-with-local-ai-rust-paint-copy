@@ -31,6 +31,7 @@ pub struct PaintApp {
     brush_size: f32,
     fill_shape: bool,
     draw_state: DrawState,
+    pre_draw_state: Option<Vec<u8>>,
     undo_stack: UndoStack,
     pointer_pos: Option<egui::Pos2>,
     primary_just_pressed: bool,
@@ -50,6 +51,7 @@ impl PaintApp {
             draw_state: DrawState::None,
             undo_stack: UndoStack::new(20),
             pointer_pos: None,
+            pre_draw_state: None,
             primary_just_pressed: false,
             primary_just_released: false,
             show_about: false,
@@ -117,29 +119,25 @@ impl App for PaintApp {
         // MENU BAR
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                if ui.button("File").clicked() {
-                    ui.menu_button("File", |ui| {
-                        if ui.button("Open...").clicked() {}
-                        if ui.button("Save...").clicked() {}
-                        ui.separator();
-                        if ui.button("About").clicked() {
-                            self.show_about = true;
-                        }
-                    });
-                }
-                if ui.button("Edit").clicked() {
-                    ui.menu_button("Edit", |ui| {
-                        if ui.button("Undo  (Ctrl+Z)").clicked() {
-                            self.undo();
-                        }
-                        if ui.button("Redo  (Ctrl+Y)").clicked() {
-                            self.redo();
-                        }
-                        if ui.button("Clear Canvas").clicked() {
-                            self.clear_canvas();
-                        }
-                    });
-                }
+                ui.menu_button("File", |ui| {
+                    if ui.button("Open...").clicked() {}
+                    if ui.button("Save...").clicked() {}
+                    ui.separator();
+                    if ui.button("About").clicked() {
+                        self.show_about = true;
+                    }
+                });
+                ui.menu_button("Edit", |ui| {
+                    if ui.button("Undo  (Ctrl+Z)").clicked() {
+                        self.undo();
+                    }
+                    if ui.button("Redo  (Ctrl+Y)").clicked() {
+                        self.redo();
+                    }
+                    if ui.button("Clear Canvas").clicked() {
+                        self.clear_canvas();
+                    }
+                });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.label(format!("{} x {}", Canvas::CW, Canvas::CH));
                 });
@@ -176,7 +174,6 @@ impl App for PaintApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             self.primary_just_pressed = ui.input(|i| i.pointer.primary_pressed());
             self.primary_just_released = ui.input(|i| i.pointer.primary_released());
-            let pointer = ui.input(|i| i.pointer.interact_pos().or(i.pointer.hover_pos()));
 
             let available = ui.available_size();
             let cw_f = Canvas::CW as f32;
@@ -220,6 +217,10 @@ impl App for PaintApp {
                 if let Some(pos) = resp.interact_pointer_pos() {
                     self.save_state();
                     if let Some(pt) = self.screen_to_canvas(pos) {
+                        // Save canvas state before shape drawing
+                        if self.tool.is_shape() {
+                            self.pre_draw_state = Some(self.canvas.clone_data());
+                        }
                         if self.tool == Tool::Pencil || self.tool == Tool::Eraser {
                             let r = (self.brush_size / 2.0) as i32;
                             for dy in -r..=r {
@@ -236,42 +237,54 @@ impl App for PaintApp {
                 }
             }
 
-            // DRAG
+            // DRAG (pencil/eraser draw to buffer; shapes draw dashed preview to buffer)
             if matches!(self.draw_state, DrawState::Drawing { .. }) {
-                if let Some(pt) = self.screen_to_canvas(pointer.unwrap_or_else(|| resp.rect.center())) {
-                    let start_pt = match self.draw_state {
-                        DrawState::Drawing { start } => Point::new(start.x as i32, start.y as i32),
-                        _ => pt,
-                    };
-                    match self.tool {
-                        Tool::Pencil | Tool::Eraser => {
-                            shapes::draw_line(&mut self.canvas, start_pt, pt, tool_color);
-                        }
-                        Tool::Line => {
-                            shapes::draw_dashed_line(&mut self.canvas, start_pt, pt, tool_color);
-                        }
-                        Tool::Rectangle => {
-                            if self.fill_shape {
-                                shapes::fill_rect(&mut self.canvas, start_pt, pt, tool_color);
-                            } else {
-                                shapes::draw_dashed_rect(&mut self.canvas, start_pt, pt, tool_color);
+                if let Some(pos) = resp.interact_pointer_pos() {
+                    let canvas_pt = self.screen_to_canvas(pos);
+                    if let Some(pt) = canvas_pt {
+                        let start_pt = match self.draw_state {
+                            DrawState::Drawing { start } => Point::new(start.x as i32, start.y as i32),
+                            _ => pt,
+                        };
+
+                        match self.tool {
+                            // Pencil and eraser: draw directly to canvas buffer (permanent)
+                            Tool::Pencil | Tool::Eraser => {
+                                shapes::draw_line(&mut self.canvas, start_pt, pt, tool_color);
+                                ctx.request_repaint();
                             }
-                        }
-                        Tool::Ellipse => {
-                            let cx = (start_pt.x + pt.x) / 2;
-                            let cy = (start_pt.y + pt.y) / 2;
-                            let rx = (pt.x - start_pt.x).unsigned_abs() as i32 / 2;
-                            let ry = (pt.y - start_pt.y).unsigned_abs() as i32 / 2;
-                            let center = Point::new(cx, cy);
-                            if self.fill_shape {
-                                shapes::fill_ellipse(&mut self.canvas, center, rx, ry, tool_color);
-                            } else {
-                                shapes::draw_dashed_ellipse(&mut self.canvas, center, rx, ry, tool_color);
+                            // Line tool: dashed preview to buffer
+                            Tool::Line => {
+                                shapes::draw_dashed_line(&mut self.canvas, start_pt, pt, tool_color);
+                                ctx.request_repaint();
                             }
+                            // Rectangle: dashed preview to buffer
+                            Tool::Rectangle => {
+                                if self.fill_shape {
+                                    shapes::fill_rect(&mut self.canvas, start_pt, pt, tool_color);
+                                } else {
+                                    shapes::draw_dashed_rect(&mut self.canvas, start_pt, pt, tool_color);
+                                }
+                                ctx.request_repaint();
+                            }
+                            // Ellipse: dashed preview to buffer
+                            Tool::Ellipse => {
+                                let cx = (start_pt.x + pt.x) / 2;
+                                let cy = (start_pt.y + pt.y) / 2;
+                                let rx = (pt.x - start_pt.x).unsigned_abs() as i32 / 2;
+                                let ry = (pt.y - start_pt.y).unsigned_abs() as i32 / 2;
+                                let center = Point::new(cx, cy);
+                                if self.fill_shape {
+                                    shapes::fill_ellipse(&mut self.canvas, center, rx, ry, tool_color);
+                                } else {
+                                    shapes::draw_dashed_ellipse(&mut self.canvas, center, rx, ry, tool_color);
+                                }
+                                ctx.request_repaint();
+                            }
+                            // Fill and eyedropper: no drag behavior
+                            Tool::Fill | Tool::Eyedropper => {}
                         }
-                        _ => {}
                     }
-                    ctx.request_repaint();
                 }
             }
 
@@ -280,6 +293,13 @@ impl App for PaintApp {
                 if let DrawState::Drawing { start } = self.draw_state {
                     let start_pt = Point::new(start.x as i32, start.y as i32);
                     if let Some(end_pt) = self.pointer_pos.and_then(|p| self.screen_to_canvas(p)) {
+                        // Restore canvas to pre-draw state for shape tools
+                        if self.tool.is_shape() {
+                            if let Some(pre_data) = &self.pre_draw_state {
+                                self.canvas.load_from_pixels(pre_data);
+                            }
+                            self.pre_draw_state = None;
+                        }
                         match self.tool {
                             Tool::Line => {
                                 if start.distance(egui::Pos2::new(end_pt.x as f32, end_pt.y as f32)) > 1.0 {

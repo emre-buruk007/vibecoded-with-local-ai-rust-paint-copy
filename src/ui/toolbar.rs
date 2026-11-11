@@ -51,12 +51,13 @@ pub fn toolbar_ui(
                 if selected.clicked() {
                     *tool = t;
                 }
-
-                // Show fill toggle only for shape tools
-                if t.is_shape() {
-                    ui.checkbox(fill_shape, "Fill");
-                }
+                // Only show fill checkbox for shape tools in the menu
             });
+        }
+
+        // Single fill checkbox (shown when a shape tool is selected)
+        if tool.is_shape() {
+            ui.checkbox(fill_shape, "Fill");
         }
 
         ui.separator();
