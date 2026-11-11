@@ -39,6 +39,6 @@ impl Tool {
     }
 
     pub fn is_shape(&self) -> bool {
-        matches!(self, Self::Rectangle | Self::Ellipse)
+        matches!(self, Self::Line | Self::Rectangle | Self::Ellipse)
     }
 }

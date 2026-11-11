@@ -37,6 +37,9 @@ pub struct PaintApp {
     primary_just_pressed: bool,
     primary_just_released: bool,
     show_about: bool,
+    show_resize: bool,
+    resize_w: String,
+    resize_h: String,
     canvas_layout: CanvasLayout,
 }
 
@@ -55,6 +58,9 @@ impl PaintApp {
             primary_just_pressed: false,
             primary_just_released: false,
             show_about: false,
+            show_resize: false,
+            resize_w: Canvas::CW.to_string(),
+            resize_h: Canvas::CH.to_string(),
             canvas_layout: CanvasLayout::default(),
         }
     }
@@ -123,6 +129,10 @@ impl App for PaintApp {
                     if ui.button("Open...").clicked() {}
                     if ui.button("Save...").clicked() {}
                     ui.separator();
+                    if ui.button("Resize Canvas...").clicked() {
+                        self.show_resize = true;
+                    }
+                    ui.separator();
                     if ui.button("About").clicked() {
                         self.show_about = true;
                     }
@@ -190,7 +200,7 @@ impl App for PaintApp {
             let size = egui::Vec2::new(canvas_w, canvas_h);
             let scale = canvas_w / cw_f;
 
-            let (alloc_rect, resp) = ui.allocate_exact_size(size, egui::Sense::click_and_drag());
+            let (alloc_rect, _resp) = ui.allocate_exact_size(size, egui::Sense::click_and_drag());
             self.canvas_layout = CanvasLayout { rect: alloc_rect, scale };
 
             let tile_size = 16.0;
@@ -213,8 +223,8 @@ impl App for PaintApp {
             let tool_color = if self.tool == Tool::Eraser { egui::Color32::WHITE } else { self.color };
 
             // PRESS
-            if self.primary_just_pressed && resp.drag_started() {
-                if let Some(pos) = resp.interact_pointer_pos() {
+            if self.primary_just_pressed {
+                if let Some(pos) = self.pointer_pos {
                     self.save_state();
                     if let Some(pt) = self.screen_to_canvas(pos) {
                         // Save canvas state before shape drawing
@@ -239,7 +249,7 @@ impl App for PaintApp {
 
             // DRAG (pencil/eraser draw to buffer; shapes draw dashed preview to buffer)
             if matches!(self.draw_state, DrawState::Drawing { .. }) {
-                if let Some(pos) = resp.interact_pointer_pos() {
+                if let Some(pos) = self.pointer_pos {
                     let canvas_pt = self.screen_to_canvas(pos);
                     if let Some(pt) = canvas_pt {
                         let start_pt = match self.draw_state {
@@ -337,6 +347,31 @@ impl App for PaintApp {
                 }
             }
         });
+
+        if self.show_resize {
+            egui::Window::new("Resize Canvas")
+                .collapsible(false).resizable(false)
+                .show(ctx, |ui| {
+                    ui.label("Width (px):");
+                    ui.text_edit_singleline(&mut self.resize_w);
+                    ui.label("Height (px):");
+                    ui.text_edit_singleline(&mut self.resize_h);
+                    ui.separator();
+                    let w = self.resize_w.parse::<u32>().unwrap_or(Canvas::CW);
+                    let h = self.resize_h.parse::<u32>().unwrap_or(Canvas::CH);
+                    if ui.button("Resize").clicked() && w >= 10 && h >= 10 {
+                        let old_data = self.canvas.clone_data();
+                        self.canvas.resize(w, h);
+                        self.canvas.load_from_pixels(&old_data);
+                        self.show_resize = false;
+                        ctx.request_repaint();
+                    }
+                    ui.separator();
+                    if ui.button("Cancel").clicked() {
+                        self.show_resize = false;
+                    }
+                });
+        }
 
         if self.show_about {
             egui::Window::new("About Paint")

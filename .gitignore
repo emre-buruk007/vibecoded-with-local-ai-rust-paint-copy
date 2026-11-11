@@ -8,6 +8,7 @@
 .vs/
 *.swp
 *.swo
+.clinerules/
 
 # OS
 .DS_Store

@@ -59,6 +59,21 @@ impl Canvas {
         self.data.clone()
     }
 
+    pub fn resize(&mut self, new_w: u32, new_h: u32) {
+        let mut new_data = vec![255u8; (new_w * new_h * 4) as usize];
+        let copy_w = self.width.min(new_w);
+        let copy_h = self.height.min(new_h);
+        for y in 0..copy_h {
+            let old_row = &self.data[(y * self.width * 4) as usize..((y + 1) * self.width * 4) as usize];
+            let dest = ((y * new_w + 0) * 4) as usize;
+            let copy_len = (copy_w * 4) as usize;
+            new_data[dest..dest + copy_len].copy_from_slice(&old_row[..copy_len]);
+        }
+        self.data = new_data;
+        self.width = new_w;
+        self.height = new_h;
+    }
+
     pub fn load_from_pixels(&mut self, pixels: &[u8]) {
         let needed = (self.width * self.height * 4) as usize;
         if pixels.len() >= needed {
