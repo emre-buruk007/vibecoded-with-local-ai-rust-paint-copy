@@ -97,8 +97,21 @@ impl PaintApp {
             let size = egui::Vec2::new(canvas_w, canvas_h);
             let scale = canvas_w / cw_f;
 
-            let (alloc_rect, _resp) = ui.allocate_exact_size(size, egui::Sense::click_and_drag());
+            let (alloc_rect, resp) = ui.allocate_exact_size(size, egui::Sense::click_and_drag());
             self.canvas_layout = crate::app::CanvasLayout { rect: alloc_rect, scale };
+
+            let pointer_hover = ctx.pointer_hover_pos();
+            let pointer_over_canvas = pointer_hover.map_or(false, |pos| alloc_rect.contains(pos));
+            if pointer_over_canvas {
+                if resp.drag_started() {
+                    self.primary_just_pressed = true;
+                    self.pointer_pos = Some(resp.interact_pointer_pos().unwrap_or(pointer_hover.unwrap_or(self.pointer_pos.unwrap_or(egui::Pos2::ZERO))));
+                }
+                if resp.drag_stopped() {
+                    self.primary_just_released = true;
+                    self.pointer_pos = Some(resp.interact_pointer_pos().unwrap_or(pointer_hover.unwrap_or(self.pointer_pos.unwrap_or(egui::Pos2::ZERO))));
+                }
+            }
 
             let tile_size = 16.0;
             for x in 0..(canvas_w / tile_size + 1.0) as i32 {
