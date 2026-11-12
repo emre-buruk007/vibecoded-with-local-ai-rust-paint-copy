@@ -34,6 +34,8 @@ pub struct PaintApp {
     pub canvas_image: egui::ColorImage,
     /// Cached texture handle — avoids per-frame texture creation.
     pub canvas_texture: Option<egui::TextureHandle>,
+    /// Whether the canvas has been modified since last render (controls texture upload).
+    pub canvas_dirty: bool,
 }
 
 impl PaintApp {
@@ -59,6 +61,7 @@ impl PaintApp {
             show_about: false,
             canvas_image: egui::ColorImage::new([Canvas::CW as usize, Canvas::CH as usize], egui::Color32::WHITE),
             canvas_texture: None,
+            canvas_dirty: true,
         }
     }
 }
@@ -73,6 +76,7 @@ impl PaintApp {
         if let Some(prev) = self.undo_stack.pop(self.canvas.data()) {
             self.undo_stack.push(self.canvas.clone_data());
             self.canvas.load_from_pixels(&prev);
+            self.canvas_dirty = true;
         }
     }
 
@@ -80,12 +84,14 @@ impl PaintApp {
         let current = self.canvas.clone_data();
         if let Some(next) = self.undo_stack.redo_pop(&current) {
             self.canvas.load_from_pixels(&next);
+            self.canvas_dirty = true;
         }
     }
 
     pub fn clear_canvas(&mut self) {
         self.save_state();
         self.canvas.fill(egui::Color32::WHITE);
+        self.canvas_dirty = true;
     }
 
     pub fn canvas_to_color_image(&self) -> egui::ColorImage {

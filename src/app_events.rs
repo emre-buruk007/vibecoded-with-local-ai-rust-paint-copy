@@ -10,6 +10,7 @@ use crate::egui;
 impl PaintApp {
     pub fn on_mouse_press(&mut self, _ctx: &egui::Context) {
         if let Some(pt) = self.screen_to_canvas(self.pointer_pos.unwrap()) {
+            self.canvas_dirty = true;
             match self.tool {
                 Tool::Pencil | Tool::Eraser => {
                     self.save_state();
@@ -51,6 +52,7 @@ impl PaintApp {
     pub fn on_mouse_drag(&mut self, _ctx: &egui::Context) {
         if let DrawState::Drawing { .. } = self.draw_state {
             if let Some(pt) = self.screen_to_canvas(self.pointer_pos.unwrap()) {
+                self.canvas_dirty = true;
                 match self.tool {
                     Tool::Pencil | Tool::Eraser => {
                         let color = if self.tool == Tool::Eraser {
@@ -77,6 +79,7 @@ impl PaintApp {
     }
 
     pub fn on_mouse_release(&mut self, _ctx: &egui::Context) {
+        self.canvas_dirty = true;
         if let DrawState::Drawing { start: start_pt } = self.draw_state {
             if let Some(end_pt) = self.screen_to_canvas(self.pointer_pos.unwrap()) {
                 let tool_color = self.color;

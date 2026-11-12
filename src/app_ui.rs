@@ -68,16 +68,16 @@ impl PaintApp {
     pub fn render_canvas(&mut self, ctx: &egui::Context) {
         egui::CentralPanel::default().show(ctx, |ui| {
             // Update pointer position before any mouse event handling
-            self.on_pointer(ctx);
+            self.on_pointer(ui.ctx());
 
             if self.primary_just_pressed {
-                self.on_mouse_press(ctx);
+                self.on_mouse_press(ui.ctx());
             }
             if let DrawState::Drawing { .. } = self.draw_state {
-                self.on_mouse_drag(ctx);
+                self.on_mouse_drag(ui.ctx());
             }
             if self.primary_just_released {
-                self.on_mouse_release(ctx);
+                self.on_mouse_release(ui.ctx());
             }
             self.primary_just_pressed = false;
             self.primary_just_released = false;
@@ -113,6 +113,7 @@ impl PaintApp {
                 }
             }
 
+            // Checkerboard background
             let tile_size = 16.0;
             for x in 0..(canvas_w / tile_size + 1.0) as i32 {
                 for y in 0..(canvas_h / tile_size + 1.0) as i32 {
@@ -126,20 +127,28 @@ impl PaintApp {
                 }
             }
 
-            let color_image = &mut self.canvas_image;
-            let data = self.canvas.data();
-            for idx in 0..color_image.pixels.len() {
-                let i = idx * 4;
-                if i + 3 < data.len() {
-                    color_image.pixels[idx] = egui::Color32::from_rgba_unmultiplied(
-                        data[i], data[i+1], data[i+2], data[i+3],
-                    );
+            // Only update canvas_image and upload texture when canvas is dirty
+            if self.canvas_dirty {
+                let data = self.canvas.data();
+                for idx in 0..self.canvas_image.pixels.len() {
+                    let i = idx * 4;
+                    if i + 3 < data.len() {
+                        self.canvas_image.pixels[idx] = egui::Color32::from_rgba_unmultiplied(
+                            data[i], data[i+1], data[i+2], data[i+3],
+                        );
+                    }
                 }
+                let tex_handle = ui.ctx().load_texture("canvas", self.canvas_image.clone(), egui::TextureOptions::default());
+                self.canvas_texture = Some(tex_handle);
+                self.canvas_dirty = false;
             }
-            let tex_handle = ui.ctx().load_texture("canvas", color_image.clone(), egui::TextureOptions::default());
-            self.canvas_texture = Some(tex_handle.clone());
-            let texture_id = tex_handle.id();
-            ui.painter().image(texture_id, alloc_rect, egui::Rect::EVERYTHING, egui::Color32::WHITE);
+
+            // Draw cached texture if available
+            if let Some(ref tex_handle) = self.canvas_texture {
+                let texture_id = tex_handle.id();
+                ui.painter().image(texture_id, alloc_rect, egui::Rect::EVERYTHING, egui::Color32::WHITE);
+            }
+
             self.draw_shape_preview(ui, alloc_rect, scale);
         });
     }
@@ -171,7 +180,6 @@ impl PaintApp {
                     }
                     _ => {}
                 }
-                ui.ctx().request_repaint();
             }
         }
     }
@@ -249,7 +257,6 @@ impl PaintApp {
                         self.canvas.resize(w, h);
                         self.canvas.load_from_pixels(&old_data);
                         self.show_resize = false;
-                        ctx.request_repaint();
                     }
                     ui.separator();
                     if ui.button("Cancel").clicked() {
