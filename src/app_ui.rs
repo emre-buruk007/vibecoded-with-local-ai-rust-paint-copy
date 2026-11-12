@@ -67,6 +67,9 @@ impl PaintApp {
 
     pub fn render_canvas(&mut self, ctx: &egui::Context) {
         egui::CentralPanel::default().show(ctx, |ui| {
+            // Update pointer position before any mouse event handling
+            self.on_pointer(ctx);
+
             if self.primary_just_pressed {
                 self.on_mouse_press(ctx);
             }
