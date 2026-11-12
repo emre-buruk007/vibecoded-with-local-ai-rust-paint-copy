@@ -1,164 +1,167 @@
-﻿# rust-paint
+# rust-paint
 
-A pixel-perfect drawing and painting application built in Rust with egui.
+> A pixel-perfect drawing and painting application built in Rust with egui.
 
-## Features
+[![Rust](https://img.shields.io/badge/rust-1.70%2B-orange)](https://www.rust-lang.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-### Current Status
-| Category | Status | Notes |
-|----------|--------|-------|
-| **Canvas Visibility** | Done | Canvas renders correctly using egui ColorImage texture |
-| **Canvas Resizing** | Done | Scales to fit available window space while maintaining 4:3 aspect ratio |
-| **Coordinate Mapping** | Done | Screen→canvas coordinate transformation for accurate mouse interaction |
-| **Pencil Tool** | Done | Freehand drawing with live brush preview as user drags |
-| **Eraser Tool** | Done | Erases pixels (white color) with live preview |
-| **Line Tool** | Done | Dashed preview during drag, finalized on release |
-| **Rectangle Tool** | Done | Dashed preview during drag, filled/outline on release |
-| **Ellipse Tool** | Done | Dashed preview during drag, filled/outline on release |
-| **Fill Tool** | Planned | Flood fill logic exists in shapes.rs but UI not wired up yet |
-| **Eyedropper Tool** | Planned | Color picker logic exists but canvas sampling not implemented |
-| **Save/Load** | In Progress | Save as PNG implemented; open image loading needs testing |
-| **Undo/Redo** | In Progress | Basic undo stack in place; needs verification with new drawing logic |
-| **Menu Bar** | Done | File and Edit menus with proper UI layout |
-| **Dark Theme** | Done | Custom dark-themed interface throughout |
+## Screenshots
 
-### Planned Features
-- **Fill Tool**: Complete flood fill with UI integration and tolerance slider
-- **Eyedropper Tool**: Sample colors from canvas display (requires pixel readback)
-- **Redo Support**: Extend undo stack to support redo (currently only undo)
-- **Zoom/Pan**: Add zoom controls and pan navigation for large canvases
-- **Layers**: Multi-layer support with layer panel
-- **More Tools**: Text tool, shape fill, gradient fill, selection tools
-- **Preferences**: Configurable settings (default canvas size, undo steps, etc.)
-
-### Known Limitations
-- Fill tool not yet fully integrated with UI
-- Eyedropper cannot sample from displayed canvas (texture readback limitation)
-- No redo support (only single-stack undo)
-- No zoom or pan controls (canvas scales to fit but cannot zoom in/out)
-
-## Bugs Fixed (v1.0.1)
-
-| Bug | Root Cause | Fix |
-|-----|-----------|-----|
-| **Menu buttons flashing** | `ui.button("File").clicked()` logic was flawed; `ui.menu_button` requires a different pattern | Replaced `if ui.button(...).clicked() { ui.menu_button(...) }` with standard `ui.menu_button(...)` calls |
-| **No drawing with shape tools** | Usage of deprecated `hover_pos()` for pointer coordinates | Use `self.pointer_pos` (set in `update()`) as the single source of truth for pointer position |
-| **Fill toggle created multiple checkboxes** | Checkbox was inside the `Tool::all()` loop, creating one checkbox per tool type | Moved "Fill" checkbox outside the tool loop; shown once when a shape tool is selected |
-| **Shape preview + final shape rendered together** | Dashed preview drawn to canvas buffer during drag, then final shape drawn on top on release | Save canvas state on drag start; restore it on release before drawing the final shape |
+> *(Add screenshots here once available)*
 
 ## Features
 
-- **Multiple Drawing Tools**: Pencil, Line, Rectangle, Ellipse, Fill (flood fill), Eyedropper (color picker), Eraser
-- **Shape Filling**: Toggle fill mode for Rectangle and Ellipse tools
-- **Color Palette**: 12 preset colors with custom color picker (full RGBA control)
-- **Brush Size**: Adjustable brush size from 1px to 50px
-- **Undo Support**: 20-step undo history
-- **Save/Load**: Save paintings as PNG files, open existing images (PNG, JPG)
-- **Dark Theme UI**: Custom-styled dark-themed interface
+| Category | Status | Details |
+|---|---|---|
+| **Canvas** | Done | 1024×768 RGBA canvas, scales to fit window |
+| **Pencil** | Done | Freehand drawing with adjustable brush (1–50px) |
+| **Eraser** | Done | Erases pixels to white |
+| **Line** | Done | Click-and-drag straight lines with live preview |
+| **Rectangle** | Done | Outline or filled rectangles |
+| **Ellipse** | Done | Outline or filled ellipses |
+| **Fill** | Done | Flood fill with configurable color tolerance |
+| **Eyedropper** | Done | Pick colors from the palette |
+| **Undo** | Done | 20-step undo history |
+| **Save / Open** | Done | Save as PNG; open PNG and JPG files |
+| **Dark Theme** | Done | Custom-styled dark UI |
 
-## Requirements
+### Planned
+- Redo (double-stack undo)
+- Zoom / Pan
+- Layers panel
+- Text tool, gradient fill
+- Preferences dialog
 
-- [Rust](https://www.rust-lang.org/tools/install) 1.70+
-- Cargo package manager
+## Installation & Running
 
-## Building
+### Prerequisites
+
+- **[Rust](https://www.rust-lang.org/tools/install)** 1.70 or later (installed via [rustup](https://rustup.rs/))
+- A compatible OS: **Windows**, **macOS**, or **Linux** (Wayland / X11)
+
+### Quick Start
 
 ```bash
-git clone https://github.com/yourusername/rust-paint.git
+# 1. Clone the repository
+git clone https://github.com/<your-username>/rust-paint.git
 cd rust-paint
-cargo build --release
-```
 
-## Running
-
-```bash
-# Debug build (with debug assertions)
+# 2. Run in debug mode (fast compilation, with assertions)
 cargo run
 
-# Release build (optimized)
+# 3. Run in release mode (optimized, faster rendering)
 cargo run --release
 ```
 
-## Usage
+### Build Only (no run)
+
+```bash
+cargo build --release
+```
+
+The binary will be at:
+
+| Platform | Path |
+|---|---|
+| Windows | `target\release\rust-paint.exe` |
+| macOS / Linux | `target/release/rust-paint` |
+
+### Troubleshooting
+
+| Problem | Solution |
+|---|---|
+| `rustc: command not found` | Install Rust via [rustup.rs](https://rustup.rs/) and restart your terminal |
+| `glutin` / windowing errors on Linux | Install OpenGL/Wayland libs: `sudo apt install libxcb-dev libx11-dev libwayland-dev libx11-xcb-dev` |
+| Slow initial build | Be patient — the first `cargo build` compiles all dependencies (~2–5 min) |
+
+## Usage Guide
 
 ### Toolbar (Left Panel)
 
-| Tool | Description |
-|------|-------------|
-| Pencil | Freehand drawing with adjustable brush size |
-| Line | Draw straight lines (click and drag) |
-| Rectangle | Draw rectangles (click and drag) |
-| Ellipse | Draw ellipses (click and drag) |
-| Fill | Flood fill areas with color (single click) |
-| Eyedropper | Pick colors from the canvas (single click) |
-| Eraser | Erase pixels (uses white color) |
+| Key | Tool | How to Use |
+|-----|------|------------|
+| `1` | **Pencil** | Click and drag to draw freehand lines |
+| `2` | **Line** | Click start point, drag, release at end point |
+| `3` | **Rectangle** | Click and drag to define the rectangle |
+| `4` | **Ellipse** | Click and drag to define the bounding box |
+| `5` | **Fill** | Click once on a region to flood-fill it |
+| `6` | **Eyedropper** | Click a color swatch to select it |
+| `7` | **Eraser** | Click and drag to erase (paints white) |
 
-### Drawing Shapes
+### Shape Fill Mode
+When **Rectangle** or **Ellipse** is selected, a **Fill** checkbox appears:
+- **Checked** → shape is filled with the current color
+- **Unchecked** → only the outline is drawn
 
-- **Rectangle** and **Ellipse** tools have a "Fill" checkbox that appears when selected
-- When Fill is checked: the shape is filled with the selected color
-- When Fill is unchecked: only the shape outline is drawn
-
-### Color Selection
-
-- Click any of the 12 preset color swatches in the toolbar
-- Click the custom color picker at the bottom of the palette for full RGBA control
-- Use the Eyedropper tool to sample colors directly from the canvas
+### Color Palette
+- 12 preset color swatches in the toolbar
+- Custom color picker at the bottom for full **RGBA** control
+- Eyedropper picks from the palette colors
 
 ### File Operations
 
-- **File > New Canvas**: Start with a blank 1024x768 canvas
-- **File > Clear Canvas**: Clear the current canvas
-- **File > Save as PNG**: Save your work as a PNG file
-- **File > Open**: Load an image from disk (PNG, JPG, JPEG)
-- **Edit > Undo**: Undo the last action (20 steps)
-
-### Keyboard Shortcuts
-
-Press `1-7` on the keyboard to quickly select tools:
-- `1` - Pencil
-- `2` - Line
-- `3` - Rectangle
-- `4` - Ellipse
-- `5` - Fill
-- `6` - Eyedropper
-- `7` - Eraser
+| Action | Menu Path |
+|--------|-----------|
+| New Canvas | **File → New Canvas** |
+| Clear Canvas | **File → Clear Canvas** |
+| Save as PNG | **File → Save as PNG** |
+| Open Image | **File → Open** (PNG, JPG) |
+| Undo (20 steps) | **Edit → Undo** |
 
 ## Project Structure
 
 ```
-src/
-  main.rs       # Application entry point
-  lib.rs        # Library root and re-exports
-  app.rs        # Main PaintApp struct and UI logic
-  canvas.rs     # Canvas buffer management (1024x768 RGBA)
-  tool.rs       # Tool enum and tool selection logic
-  draw.rs       # Drawing state tracking
-  shapes.rs     # Drawing primitives (Bresenham line, rect, ellipse, flood fill)
-  history.rs    # Undo/redo stack
-  ui/
-    mod.rs      # UI module exports
-    toolbar.rs  # Toolbar palette constants
+rust-paint/
+├── src/
+│   ├── main.rs          # Entry point
+│   ├── lib.rs           # Library root & re-exports
+│   ├── app.rs           # Main app state, UI logic, event handling
+│   ├── canvas.rs        # Canvas buffer (1024×768 RGBA8888)
+│   ├── tool.rs          # Tool enum & selection
+│   ├── draw.rs          # Drawing state tracking
+│   ├── shapes.rs        # Drawing primitives (Bresenham line, rect, ellipse, flood fill)
+│   ├── history.rs       # Undo stack (20 steps)
+│   └── ui/
+│       ├── mod.rs       # UI module
+│       └── toolbar.rs   # Toolbar palette constants
+├── Cargo.toml
+├── README.md
+└── .clinerules/
+    └── action-plan.md   # Development plan & tracking
 ```
 
 ## Technical Details
 
-- **Canvas Resolution**: 1024 x 768 pixels (RGBA8888)
-- **Rendering**: egui texture system with automatic scaling to fit the window
-- **Drawing Primitives**: Bresenham line algorithm for crisp pixel-perfect lines
-- **Flood Fill**: Stack-based BFS algorithm with configurable color tolerance
-- **UI Framework**: egui (Immediate Mode GUI) via eframe
-- **Theme**: Custom dark theme with styled widgets, rounded corners, and consistent color palette
+| Aspect | Detail |
+|--------|--------|
+| Canvas resolution | 1024 × 768 px, RGBA8888 |
+| Rendering | egui texture system, auto-scaled to window |
+| Line algorithm | Bresenham (crisp pixel-perfect lines) |
+| Fill algorithm | Stack-based BFS with configurable tolerance |
+| UI framework | egui via eframe (immediate-mode GUI) |
+| Theme | Custom dark theme with styled widgets |
 
 ## Dependencies
 
 | Crate | Version | Purpose |
-|-------|---------|--------|
-| eframe | 0.29 | egui application framework |
-| image | 0.25 | Image loading and saving |
-| serde | 1.0 | Serialization (for future features) |
-| rfd | 0.15 | Native file dialog |
+|-------|---------|---------|
+| `eframe` | 0.29 | egui application framework |
+| `image` | 0.25 | Image loading and saving |
+| `serde` | 1.0 | Serialization (future features) |
+| `rfd` | 0.15 | Native file dialogs |
+
+## Version History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| **v1.0.3** | 2026-11-11 | **Stability fixes** — replaced all `set_pixel_unchecked` with safe `set_pixel`, added rapid-click cancellation, RELEASE guard for canvas resize safety |
+| v1.0.1 | — | Fixed menu flashing, shape preview overlap, fill toggle duplication, deprecated hover_pos |
+| v1.0.0 | — | Initial release with basic drawing tools |
 
 ## License
 
-MIT License
+MIT License — see [LICENSE](LICENSE) for details.
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
