@@ -8,7 +8,7 @@ use crate::shapes::Point;
 use crate::egui;
 
 impl PaintApp {
-    pub fn on_mouse_press(&mut self, ctx: &egui::Context) {
+    pub fn on_mouse_press(&mut self, _ctx: &egui::Context) {
         if let Some(pt) = self.screen_to_canvas(self.pointer_pos.unwrap()) {
             match self.tool {
                 Tool::Pencil | Tool::Eraser => {
@@ -30,18 +30,15 @@ impl PaintApp {
                             }
                         }
                     }
-                    ctx.request_repaint();
                 }
                 Tool::Fill => {
                     self.save_state();
                     shapes::flood_fill(&mut self.canvas, pt, self.color, 32);
-                    ctx.request_repaint();
                 }
                 Tool::Eyedropper => {
                     if let Some(pix) = self.canvas.get_pixel(pt.x as u32, pt.y as u32) {
                         self.color = egui::Color32::from_rgba_unmultiplied(pix[0], pix[1], pix[2], pix[3]);
                     }
-                    ctx.request_repaint();
                 }
                 Tool::Line | Tool::Rectangle | Tool::Ellipse => {
                     self.save_state();
@@ -51,7 +48,7 @@ impl PaintApp {
         }
     }
 
-    pub fn on_mouse_drag(&mut self, ctx: &egui::Context) {
+    pub fn on_mouse_drag(&mut self, _ctx: &egui::Context) {
         if let DrawState::Drawing { .. } = self.draw_state {
             if let Some(pt) = self.screen_to_canvas(self.pointer_pos.unwrap()) {
                 match self.tool {
@@ -76,12 +73,10 @@ impl PaintApp {
                     _ => {}
                 }
             }
-            ctx.request_repaint();
         }
     }
 
-    pub fn on_mouse_release(&mut self, ctx: &egui::Context) {
-        self.pointer_pos = ctx.pointer_hover_pos();
+    pub fn on_mouse_release(&mut self, _ctx: &egui::Context) {
         if let DrawState::Drawing { start: start_pt } = self.draw_state {
             if let Some(end_pt) = self.screen_to_canvas(self.pointer_pos.unwrap()) {
                 let tool_color = self.color;
@@ -116,7 +111,6 @@ impl PaintApp {
                 }
             }
             self.draw_state = DrawState::None;
-            ctx.request_repaint();
         }
     }
 
@@ -125,23 +119,17 @@ impl PaintApp {
             if i.modifiers.ctrl {
                 if i.key_pressed(egui::Key::Z) && !i.modifiers.shift {
                     self.undo();
-                    ctx.request_repaint();
                 } else if i.key_pressed(egui::Key::Z) && i.modifiers.shift {
                     self.redo();
-                    ctx.request_repaint();
                 }
             }
             if i.key_pressed(egui::Key::Escape) {
                 self.draw_state = DrawState::None;
-                ctx.request_repaint();
             }
         });
     }
 
     pub fn on_pointer(&mut self, ctx: &egui::Context) {
         self.pointer_pos = ctx.pointer_hover_pos();
-        if let DrawState::Drawing { .. } = self.draw_state {
-            ctx.request_repaint();
-        }
     }
 }

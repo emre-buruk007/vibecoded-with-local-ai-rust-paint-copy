@@ -30,6 +30,10 @@ pub struct PaintApp {
     pub resize_w: String,
     pub resize_h: String,
     pub show_about: bool,
+    /// Cached color image for canvas rendering — reused each frame to avoid reallocation.
+    pub canvas_image: egui::ColorImage,
+    /// Cached texture handle — avoids per-frame texture creation.
+    pub canvas_texture: Option<egui::TextureHandle>,
 }
 
 impl PaintApp {
@@ -53,6 +57,8 @@ impl PaintApp {
             resize_w: Canvas::CW.to_string(),
             resize_h: Canvas::CH.to_string(),
             show_about: false,
+            canvas_image: egui::ColorImage::new([Canvas::CW as usize, Canvas::CH as usize], egui::Color32::WHITE),
+            canvas_texture: None,
         }
     }
 }
@@ -114,7 +120,6 @@ impl PaintApp {
         self.show_resize_dialog(ctx);
         self.show_about_dialog(ctx);
         self.on_key(ctx);
-        ctx.request_repaint();
     }
 }
 

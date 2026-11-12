@@ -126,8 +126,19 @@ impl PaintApp {
                 }
             }
 
-            let color_image = self.canvas_to_color_image();
-            let texture_id = ui.ctx().load_texture("canvas", color_image, egui::TextureOptions::default()).id();
+            let color_image = &mut self.canvas_image;
+            let data = self.canvas.data();
+            for idx in 0..color_image.pixels.len() {
+                let i = idx * 4;
+                if i + 3 < data.len() {
+                    color_image.pixels[idx] = egui::Color32::from_rgba_unmultiplied(
+                        data[i], data[i+1], data[i+2], data[i+3],
+                    );
+                }
+            }
+            let tex_handle = ui.ctx().load_texture("canvas", color_image.clone(), egui::TextureOptions::default());
+            self.canvas_texture = Some(tex_handle.clone());
+            let texture_id = tex_handle.id();
             ui.painter().image(texture_id, alloc_rect, egui::Rect::EVERYTHING, egui::Color32::WHITE);
             self.draw_shape_preview(ui, alloc_rect, scale);
         });
