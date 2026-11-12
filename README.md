@@ -43,7 +43,7 @@
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/<your-username>/rust-paint.git
+git clone https://github.com/emre-buruk007/vibecoded-with-local-ai-rust-paint-copy.git
 cd rust-paint
 
 # 2. Run in debug mode (fast compilation, with assertions)
