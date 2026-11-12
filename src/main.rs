@@ -8,6 +8,6 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "Paint",
         options,
-        Box::new(|cc| Ok(Box::new(rust_paint::app::PaintApp::new(cc)))),
+        Box::new(|_cc| Ok(Box::new(rust_paint::app::PaintApp::new()))),
     )
 }

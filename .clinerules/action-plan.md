@@ -1,35 +1,51 @@
-# Paint App - Action Plan
+# CURRENT_AI_ACTIONPLAN
 
-## Current Status: v1.0.3 - Stability Fixes Complete
+## Phase 1: UI Refactoring (COMPLETED)
 
-### Recent Fixes (v1.0.3)
-- [x] **Root Cause**: `set_pixel_unchecked` allows negative/overflow coordinates → panic on edge clicks
-- [x] **Fix 1**: Brush circle clamping — replaced `set_pixel_unchecked` with safe `set_pixel` (clamps to canvas bounds) in Pencil/Eraser PRESS handler
-- [x] **Fix 2**: Rapid-click cancellation — cancel existing `DrawState` before starting a new one (prevents undo/history corruption)
-- [x] **Fix 3**: All shape functions use safe `set_pixel` — replaced all 22 `set_pixel_unchecked` calls in shapes.rs (draw_line, draw_dashed_line, draw_dashed_ellipse, draw_ellipse, fill_ellipse, fill_rect, flood_fill)
-- [x] **Fix 4**: RELEASE handler guard — skip shape finalization if canvas dimensions changed (e.g., after resize)
+### Completed Steps
+- [x] Deleted broken `src/shapes.rs` (replaced with `shapes/` module directory)
+- [x] Created `src/shapes/mod.rs` to export shape functions
+- [x] Created `src/shapes/line.rs` (Bresenham line algorithm)
+- [x] Created `src/shapes/shapes.rs` (rectangle, ellipse, flood fill, etc.)
+- [x] Created new `src/app_events.rs` - mouse/keyboard event handlers
+- [x] Created new `src/app_ui.rs` - UI rendering (menu bar, toolbar, canvas, dialogs)
+- [x] Updated `src/app.rs` - `render()` method as main render entry point
+- [x] Updated `src/lib.rs` - module declarations for new files
+- [x] Updated `src/main.rs` - entry point to use `rust_paint::app::PaintApp`
 
-### Next Up (v1.1)
-- [ ] Complete Fill tool integration (tolerance slider in toolbar)
-- [ ] Eyedropper canvas sampling (requires texture readback)
-- [ ] Redo support (double-stack undo system)
-- [ ] Zoom/Pan controls
-- [ ] Multi-layer support
+### Architecture
+```
+src/
+├── app.rs          - PaintApp struct, state, render() orchestrator, eframe::App impl
+├── app_ui.rs       - UI rendering: menu bar, toolbar, canvas, dialogs, shape previews
+├── app_events.rs   - Event handling: mouse press/drag/release, keyboard shortcuts
+├── canvas.rs       - Canvas data management
+├── tool.rs         - Tool enum (Pencil, Eraser, Line, etc.)
+├── history.rs      - Undo/Redo stack
+├── draw.rs         - DrawState enum
+├── shapes/         - Shape drawing algorithms (line, rect, ellipse, flood fill)
+│   ├── mod.rs
+│   ├── line.rs
+│   └── shapes.rs
+└── ui/
+    └── toolbar.rs  - Toolbar widget UI
+```
 
-## Plan & Act Workflow
+### Key Design Decisions
+1. `PaintApp::render()` is the single entry point called from `eframe::App::update`
+2. Rendering delegated to `app_ui.rs` methods (`render_menu_bar`, `render_toolbar`, etc.)
+3. Event handling delegated to `app_events.rs` methods (`on_mouse_press`, `on_mouse_drag`, etc.)
+4. `shapes/` module handles all shape drawing algorithms
 
-## Phase 1: When in PLAN MODE (Read-Only)
-- Read `CURRENT_AI_ACTION_PLAN.md` if it exists in the project root.
-- Present a complete plan in your chat response covering:
-  1. **Review of Past Plan:** What worked well, what didn't work, and how this plan remedies past issues.
-  2. **Next Steps & Feature Scope:** Exact features or fixes to build.
-  3. **Implementation Plan:** Files to create/modify and technical approach.
-  4. **Testing & Expected Output:** Exact test commands to run and expected results.
+## Phase 2: Fix Compilation Errors (IN PROGRESS)
 
-## Phase 2: When in ACT MODE (Execution)
-Follow these steps in strict order:
+### Known Issues
+- [ ] Need to run `cargo check` to verify all compilation errors are resolved
+- [ ] Need to verify `cargo build` succeeds
+- [ ] Need to test the application runs correctly
 
-1. **Write Initial Plan First:** Before editing any code files, write or overwrite `CURRENT_AI_ACTION_PLAN.md` in the root directory using the approved plan from Phase 1. Include a placeholder section at the bottom titled `## 5. Execution Results (To be filled before commit)`.
-2. **Implement & Test:** Build the feature and run the tests listed in Section 4.
-3. **Update Plan Before Commit:** Before running `git commit`, update `CURRENT_AI_ACTION_PLAN.md`—fill in Section 5 with what actually worked, any errors encountered, and whether actual outputs matched expected outputs. Make it easy to read, you are allowed to use tickboxes for working tests and red crosses or other appropriate emojis for failed stuff for visual engagement.
-4. **Git Commit:** Follow the Git Commit rule to stage and commit all code changes along with `CURRENT_AI_ACTION_PLAN.md`.
+## Phase 3: Additional Features (TODO)
+- [ ] Implement toolbar buttons for Undo/Redo/Clear
+- [ ] Add more shape preview rendering
+- [ ] Implement file open/save dialogs
+- [ ] Add layer management features

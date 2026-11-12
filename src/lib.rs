@@ -5,6 +5,8 @@ pub mod history;
 pub mod draw;
 pub mod ui;
 pub mod shapes;
+pub mod app_events;
+pub mod app_ui;
 
 pub use canvas::Canvas;
 pub use tool::Tool;
