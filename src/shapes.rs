@@ -22,7 +22,7 @@ pub fn draw_line(canvas: &mut Canvas, p0: Point, p1: Point, color: crate::egui::
     let sy = if y0 < y1 { 1 } else { -1 };
     let mut err = dx + dy;
     loop {
-        canvas.set_pixel_unchecked(x0 as u32, y0 as u32, color);
+        canvas.set_pixel(x0 as u32, y0 as u32, color);
         if x0 == x1 && y0 == y1 { break; }
         let e2 = 2 * err;
         if e2 >= dy { err += dy; x0 += sx; }
@@ -44,7 +44,7 @@ pub fn draw_dashed_line(canvas: &mut Canvas, p0: Point, p1: Point, color: crate:
     loop {
         // Draw every other pixel for dashed effect
         if step % 2 == 0 {
-            canvas.set_pixel_unchecked(x0 as u32, y0 as u32, color);
+            canvas.set_pixel(x0 as u32, y0 as u32, color);
         }
         if x0 == x1 && y0 == y1 { break; }
         let e2 = 2 * err;
@@ -79,10 +79,10 @@ pub fn draw_dashed_ellipse(canvas: &mut Canvas, center: Point, rx: i32, ry: i32,
         if step % 2 == 0 {
             let cx = center.x + px as i32;
             let cy = center.y - py as i32;
-            canvas.set_pixel_unchecked(cx.max(0) as u32, cy.max(0) as u32, color);
-            canvas.set_pixel_unchecked(cx.max(0) as u32, (-cy).max(0) as u32, color);
-            canvas.set_pixel_unchecked((-cx).max(0) as u32, cy.max(0) as u32, color);
-            canvas.set_pixel_unchecked((-cx).max(0) as u32, (-cy).max(0) as u32, color);
+            canvas.set_pixel(cx.max(0) as u32, cy.max(0) as u32, color);
+            canvas.set_pixel(cx.max(0) as u32, (-cy).max(0) as u32, color);
+            canvas.set_pixel((-cx).max(0) as u32, cy.max(0) as u32, color);
+            canvas.set_pixel((-cx).max(0) as u32, (-cy).max(0) as u32, color);
         }
         if p < 0 { px += py2; px2 += py2; p += py2; }
         else { px += py2; px2 += py2; py -= px2; py2 -= px2; p += py2 - px2; }
@@ -94,10 +94,10 @@ pub fn draw_dashed_ellipse(canvas: &mut Canvas, center: Point, rx: i32, ry: i32,
         if step % 2 == 0 {
             let cx = center.x + px as i32;
             let cy = center.y - py as i32;
-            canvas.set_pixel_unchecked(cx.max(0) as u32, cy.max(0) as u32, color);
-            canvas.set_pixel_unchecked(cx.max(0) as u32, (-cy).max(0) as u32, color);
-            canvas.set_pixel_unchecked((-cx).max(0) as u32, cy.max(0) as u32, color);
-            canvas.set_pixel_unchecked((-cx).max(0) as u32, (-cy).max(0) as u32, color);
+            canvas.set_pixel(cx.max(0) as u32, cy.max(0) as u32, color);
+            canvas.set_pixel(cx.max(0) as u32, (-cy).max(0) as u32, color);
+            canvas.set_pixel((-cx).max(0) as u32, cy.max(0) as u32, color);
+            canvas.set_pixel((-cx).max(0) as u32, (-cy).max(0) as u32, color);
         }
         if p > 0 { py -= px2; py2 -= px2; p -= px2; }
         else { px += py2; px2 += py2; py -= px2; py2 -= px2; p += py2 - px2; }
@@ -122,7 +122,7 @@ pub fn fill_rect(canvas: &mut Canvas, p0: Point, p1: Point, color: crate::egui::
     for y in y0..=y1 {
         for x in x0..=x1 {
             if x >= 0 && x < w as i32 && y >= 0 && y < h as i32 {
-                canvas.set_pixel_unchecked(x as u32, y as u32, color);
+                canvas.set_pixel(x as u32, y as u32, color);
             }
         }
     }
@@ -139,10 +139,10 @@ pub fn draw_ellipse(canvas: &mut Canvas, center: Point, rx: i32, ry: i32, color:
     while px < px2 {
         let cx = center.x + px as i32;
         let cy = center.y - py as i32;
-        canvas.set_pixel_unchecked(cx.max(0) as u32, cy.max(0) as u32, color);
-        canvas.set_pixel_unchecked(cx.max(0) as u32, (-cy).max(0) as u32, color);
-        canvas.set_pixel_unchecked((-cx).max(0) as u32, cy.max(0) as u32, color);
-        canvas.set_pixel_unchecked((-cx).max(0) as u32, (-cy).max(0) as u32, color);
+        canvas.set_pixel(cx.max(0) as u32, cy.max(0) as u32, color);
+        canvas.set_pixel(cx.max(0) as u32, (-cy).max(0) as u32, color);
+        canvas.set_pixel((-cx).max(0) as u32, cy.max(0) as u32, color);
+        canvas.set_pixel((-cx).max(0) as u32, (-cy).max(0) as u32, color);
         if p < 0 { px += py2; px2 += py2; p += py2; }
         else { px += py2; px2 += py2; py -= px2; py2 -= px2; p += py2 - px2; }
     }
@@ -150,10 +150,10 @@ pub fn draw_ellipse(canvas: &mut Canvas, center: Point, rx: i32, ry: i32, color:
     while y < 0 {
         let cx = center.x + px as i32;
         let cy = center.y - py as i32;
-        canvas.set_pixel_unchecked(cx.max(0) as u32, cy.max(0) as u32, color);
-        canvas.set_pixel_unchecked(cx.max(0) as u32, (-cy).max(0) as u32, color);
-        canvas.set_pixel_unchecked((-cx).max(0) as u32, cy.max(0) as u32, color);
-        canvas.set_pixel_unchecked((-cx).max(0) as u32, (-cy).max(0) as u32, color);
+        canvas.set_pixel(cx.max(0) as u32, cy.max(0) as u32, color);
+        canvas.set_pixel(cx.max(0) as u32, (-cy).max(0) as u32, color);
+        canvas.set_pixel((-cx).max(0) as u32, cy.max(0) as u32, color);
+        canvas.set_pixel((-cx).max(0) as u32, (-cy).max(0) as u32, color);
         if p > 0 { py -= px2; py2 -= px2; p -= px2; }
         else { px += py2; px2 += py2; py -= px2; py2 -= px2; p += py2 - px2; }
         y += 1;
@@ -165,14 +165,14 @@ pub fn fill_ellipse(canvas: &mut Canvas, center: Point, rx: i32, ry: i32, color:
     for y in -ry..=ry {
         if center.y + y < 0 || center.y + y >= h as i32 { continue; }
         if rx == 0 {
-            canvas.set_pixel_unchecked(center.x as u32, (center.y + y).max(0) as u32, color);
+            canvas.set_pixel(center.x as u32, (center.y + y).max(0) as u32, color);
             continue;
         }
         let x_max = ((rx as f64 * rx as f64 * (ry * ry - y * y) as f64 / (ry * ry) as f64).sqrt() as i32).max(0);
         for x in -x_max..=x_max {
             let px = center.x + x; let py = center.y + y;
             if px >= 0 && px < w as i32 && py >= 0 && py < h as i32 {
-                canvas.set_pixel_unchecked(px as u32, py as u32, color);
+                canvas.set_pixel(px as u32, py as u32, color);
             }
         }
     }
@@ -188,7 +188,7 @@ pub fn flood_fill(canvas: &mut Canvas, start: Point, new_color: crate::egui::Col
         if p.x < 0 || p.x >= w as i32 || p.y < 0 || p.y >= h as i32 { continue; }
         let current = match canvas.get_pixel(p.x as u32, p.y as u32) { Some(c) => c, None => continue };
         if color_distance(current, target_color) > tolerance as u32 { continue; }
-        canvas.set_pixel_unchecked(p.x as u32, p.y as u32, new_color);
+        canvas.set_pixel(p.x as u32, p.y as u32, new_color);
         stack.push_back(Point::new(p.x + 1, p.y));
         stack.push_back(Point::new(p.x - 1, p.y));
         stack.push_back(Point::new(p.x, p.y + 1));

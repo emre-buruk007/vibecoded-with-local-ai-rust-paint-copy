@@ -224,6 +224,11 @@ impl App for PaintApp {
             if self.primary_just_pressed {
                 if let Some(pos) = self.pointer_pos {
                     if let Some(pt) = self.screen_to_canvas(pos) {
+                        // Cancel any active draw state before starting a new one (prevents rapid-click state corruption)
+                        if !matches!(self.draw_state, DrawState::None) {
+                            self.draw_state = DrawState::None;
+                        }
+
                         if self.tool == Tool::Pencil || self.tool == Tool::Eraser {
                             // Pencil/Eraser: draw immediately to canvas buffer
                             self.save_state();
@@ -231,7 +236,8 @@ impl App for PaintApp {
                             for dy in -r..=r {
                                 for dx in -r..=r {
                                     if dx * dx + dy * dy <= r * r {
-                                        self.canvas.set_pixel_unchecked((pt.x + dx) as u32, (pt.y + dy) as u32, tool_color);
+                                        // Use set_pixel (clamps to bounds) instead of set_pixel_unchecked to prevent out-of-bounds panic
+                                        self.canvas.set_pixel((pt.x + dx) as u32, (pt.y + dy) as u32, tool_color);
                                     }
                                 }
                             }
@@ -322,6 +328,14 @@ impl App for PaintApp {
             if self.primary_just_released && matches!(self.draw_state, DrawState::Drawing { .. }) {
                 if let DrawState::Drawing { start } = self.draw_state {
                     let start_pt = start;
+                    // Fix 4: Guard - skip if canvas dimensions changed (e.g., after resize) which could invalidate the start point
+                    let cw = self.canvas.width() as i32;
+                    let ch = self.canvas.height() as i32;
+                    if start_pt.x < 0 || start_pt.x >= cw || start_pt.y < 0 || start_pt.y >= ch {
+                        self.draw_state = DrawState::None;
+                        ctx.request_repaint();
+                        return;
+                    }
                     if let Some(end_pt) = self.pointer_pos.and_then(|p| self.screen_to_canvas(p)) {
                         let dx = (start_pt.x as f32 - end_pt.x as f32).abs();
                         let dy = (start_pt.y as f32 - end_pt.y as f32).abs();
